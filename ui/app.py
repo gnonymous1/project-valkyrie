@@ -1,12 +1,15 @@
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Header, Footer, Button, Label
+from textual.widgets import Header, Footer, Button, Label, DataTable
 from ui.widgets import NetworkTable, AgentLog, StatusHeader
 from core.knowledge_base import KnowledgeBase
 from core.ai import GeminiClient
+from core.tools import ToolSuite
+from ui.modals import APIKeyModal
+from ui.control_panel import TargetControlPanel
+from ui.settings import SettingsModal
 import threading
 import time
-import asyncio
 
 # Import Agents
 from agents.ethics import EthicsAgent
@@ -16,9 +19,6 @@ from agents.threat import ThreatModelingAgent
 from agents.evasion import DefenseEvasionAgent
 from agents.exploitation import ExploitationAgent
 from agents.recovery import FailureRecoveryAgent
-from agents.reporting import ReportingAgent
-
-from ui.modals import APIKeyModal
 
 class WifiAgentApp(App):
     TITLE = "PROJECT VALKYRIE: Autonomous Wireless Interdiction Swarm"
@@ -29,22 +29,35 @@ class WifiAgentApp(App):
     .box {
         height: 100%;
         border: solid green;
+        padding: 1;
+    }
+    #top-row {
+        height: 70%;
+    }
+    #bottom-row {
+        height: 30%;
+        border: solid yellow;
+        padding: 1;
     }
     #left-pane {
-        width: 50%;
+        width: 60%;
     }
     #right-pane {
-        width: 50%;
+        width: 40%;
     }
-    APIKeyModal {
+    #action_buttons Button {
+        width: 100%;
+        margin-bottom: 1;
+    }
+    APIKeyModal, SettingsModal {
         align: center middle;
     }
     """
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("d", "toggle_dry_run", "Toggle Dry Run"),
-        ("a", "analyze_target", "AI Analyze Selected"),
-        ("k", "configure_api_key", "Config API Key")
+        ("s", "open_settings", "Settings"),
+        ("k", "configure_api_key", "AI Key")
     ]
 
     def __init__(self, dry_run=False, interface="wlan0"):
@@ -55,6 +68,8 @@ class WifiAgentApp(App):
         self.kb.environment.mon_interface = f"{interface}mon" if dry_run else None
         
         self.ai = GeminiClient()
+        self.tools = ToolSuite()
+        self.scanning = True
         self.running = True
         self.agent_thread = None
 
@@ -62,27 +77,26 @@ class WifiAgentApp(App):
         yield Header()
         yield StatusHeader(id="status_header")
         
-        with Horizontal():
+        with Horizontal(id="top-row"):
             with Vertical(id="left-pane", classes="box"):
-                yield Label("Discovered Targets (Live)")
+                yield Label("[reverse] DISCOVERED TARGETS [/reverse]")
                 yield NetworkTable(id="network_table")
                 
             with Vertical(id="right-pane", classes="box"):
-                yield Label("Agent Activity Log")
-                yield AgentLog(id="agent_log")
+                yield TargetControlPanel(id="control_panel")
+        
+        with Vertical(id="bottom-row"):
+            yield Label("[reverse] AGENT ACTIVITY LOG [/reverse]")
+            yield AgentLog(id="agent_log")
         
         yield Footer()
 
     def on_mount(self) -> None:
-        # Check if API Key is missing, ask for it
         if not self.ai.api_key:
             self.push_screen(APIKeyModal(), self.set_api_key)
 
-        # Start Agent Swarm in Background Thread
         self.agent_thread = threading.Thread(target=self.run_agent_swarm, daemon=True)
         self.agent_thread.start()
-        
-        # Start UI Update Timer
         self.set_interval(1.0, self.update_ui)
 
     def set_api_key(self, key: str | None) -> None:
@@ -91,48 +105,68 @@ class WifiAgentApp(App):
                 self.notify("API Key Configured Successfully!")
             else:
                 self.notify("Failed to configure API Key.", severity="error")
-        else:
-            self.notify("No API Key provided. AI features disabled.")
 
     def action_configure_api_key(self) -> None:
         self.push_screen(APIKeyModal(), self.set_api_key)
 
+    def action_open_settings(self) -> None:
+        self.push_screen(SettingsModal(), self.set_interface)
+
+    def set_interface(self, iface: str | None) -> None:
+        if iface:
+            self.kb.environment.managed_interface = iface
+            self.notify(f"Interface changed to {iface}")
+            self.kb.environment.mon_interface = None # Force re-init
+
     def update_ui(self) -> None:
-        self.query_one("#network_table").update_data()
+        table = self.query_one("#network_table")
+        table.update_data()
         self.query_one("#agent_log").update_log()
         
-        status = "Active" if self.running else "Stopped"
-        iface = self.kb.environment.mon_interface or "Initializing..."
+        # Update Control Panel with selected target
+        try:
+            # coordinate_to_cell_key might return None if no selection
+            coord = table.cursor_coordinate
+            row_key = table.coordinate_to_cell_key(coord).row_key
+            if row_key:
+                target_bssid = str(row_key.value)
+                target = self.kb.get_target(target_bssid)
+                self.query_one("#control_panel").update_target(target)
+        except Exception:
+            pass
+
+        status = "Scanning" if self.scanning else "Idle"
+        iface = self.kb.environment.mon_interface or self.kb.environment.managed_interface
         self.query_one("#status_header").update_status(status, iface)
 
-    def action_analyze_target(self) -> None:
-        table = self.query_one("#network_table")
-        try:
-            # Get selected row key (BSSID)
-            # Textual DataTable APIs can be tricky, assuming simplest selection
-            row_key = table.coordinate_to_cell_key(table.cursor_coordinate).row_key
-            if not row_key: return
-            
-            target = self.kb.get_target(str(row_key.value))
-            if target:
-                self.notify(f"Asking Gemini about {target.ssid}...")
-                
-                # Run AI in thread to avoid blocking UI
-                def ask_ai():
-                    analysis = self.ai.analyze_target(target.ssid, target.encryption)
-                    self.kb.log_action("GEMINI_AI", "Analysis", "Completed")
-                    # In a real app we'd show a modal, here we log it
-                    self.kb.log_action("GEMINI_AI_RESULT", "Response", analysis)
-                
-                threading.Thread(target=ask_ai, daemon=True).start()
-                
-        except Exception as e:
-            self.notify("Select a target first!")
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        target = self.query_one("#control_panel").selected_target
+        mon_iface = self.kb.environment.mon_interface or self.kb.environment.managed_interface
+
+        if event.button.id == "btn_scan":
+            self.scanning = True
+            self.notify("Manual scanning started.")
+        elif event.button.id == "btn_stop":
+            self.scanning = False
+            self.notify("Scanning paused.")
+        elif event.button.id == "btn_ai" and target:
+            self.notify(f"AI Analyzing {target.ssid}...")
+            threading.Thread(target=self.ai_analyze, args=(target,), daemon=True).start()
+        elif event.button.id == "btn_deauth" and target:
+            self.notify(f"Deauth Attack on {target.ssid}...")
+            threading.Thread(target=self.tools.capture_handshake, args=(mon_iface, target), daemon=True).start()
+        elif event.button.id == "btn_pmkid" and target:
+            self.notify(f"PMKID Capture on {target.ssid}...")
+            threading.Thread(target=self.tools.capture_pmkid, args=(mon_iface, target), daemon=True).start()
+        elif event.button.id == "btn_wps" and target:
+            self.notify(f"WPS Attack on {target.ssid}...")
+            threading.Thread(target=self.tools.attack_wps, args=(mon_iface, target), daemon=True).start()
+
+    def ai_analyze(self, target):
+        analysis = self.ai.analyze_target(target.ssid, target.encryption)
+        self.kb.log_action("GEMINI_AI", f"Result for {target.ssid}", analysis)
 
     def run_agent_swarm(self):
-        """
-        The main agent loop, running in a background thread.
-        """
         agents = {
             "ethics": EthicsAgent(),
             "recovery": FailureRecoveryAgent(),
@@ -141,23 +175,23 @@ class WifiAgentApp(App):
             "recon": ReconAgent(),
             "threat": ThreatModelingAgent(),
             "exploit": ExploitationAgent(),
-            # ReportingAgent is disabled in UI mode logs handle it
         }
         
-        loop_count = 1
         while self.running:
-            # 1. Recovery
-            if not agents["recovery"].run(): break
-            
-            # 2. Env/Ethics
-            agents["environment"].run()
-            agents["ethics"].run()
-            
-            # 3. Action
-            agents["evasion"].run()
-            agents["recon"].run()
-            agents["threat"].run()
-            agents["exploit"].run()
+            if not self.scanning:
+                time.sleep(1)
+                continue
+
+            # Standard agent loop
+            try:
+                agents["recovery"].run()
+                agents["environment"].run()
+                agents["ethics"].run()
+                agents["evasion"].run()
+                agents["recon"].run()
+                agents["threat"].run()
+                agents["exploit"].run()
+            except Exception as e:
+                self.kb.log_action("SYSTEM", "Error in swarm", str(e))
             
             time.sleep(5)
-            loop_count += 1

@@ -14,29 +14,47 @@ class NetworkTable(DataTable):
         self.kb = KnowledgeBase()
 
     def update_data(self) -> None:
-        self.clear()
-        for t in self.kb.targets.values():
-            # Formatting PWNED
-            pwned_status = []
-            if t.handshake_captured: pwned_status.append("HS")
-            if t.pmkid_captured: pwned_status.append("PMKID")
-            if t.wps_pin: pwned_status.append("PIN")
-            pwn_str = ", ".join(pwned_status) if pwned_status else "NO"
+        # Get count of current targets to see if we need a full refresh
+        # or if we can just update existing rows.
+        # Clearing every second breaks user interaction.
+        
+        current_rows = {str(k.value): i for i, k in enumerate(self.rows.keys())}
+        new_targets = self.kb.targets
+        
+        # If lengths match and rows match, we might still want to update values (signal, etc)
+        # But clearing is very disruptive.
+        
+        # Strategy: Clear only if new targets found or if status changed significantly
+        if len(new_targets) != len(current_rows):
+            self.clear()
+            for t in new_targets.values():
+                self._add_target_row(t)
+        else:
+            # Optionally update specific cells here if needed
+            pass
 
-            # Formatting WPS
-            wps_str = "-"
-            if t.wps_enabled:
-                wps_str = "LOCKED" if t.wps_locked else "OPEN"
+    def _add_target_row(self, t):
+        # Formatting PWNED
+        pwned_status = []
+        if t.handshake_captured: pwned_status.append("HS")
+        if t.pmkid_captured: pwned_status.append("PMKID")
+        if t.wps_pin: pwned_status.append("PIN")
+        pwn_str = ", ".join(pwned_status) if pwned_status else "NO"
 
-            self.add_row(
-                t.bssid,
-                t.ssid,
-                str(t.channel),
-                t.encryption,
-                wps_str,
-                pwn_str,
-                key=t.bssid # Key for row identification
-            )
+        # Formatting WPS
+        wps_str = "-"
+        if t.wps_enabled:
+            wps_str = "LOCKED" if t.wps_locked else "OPEN"
+
+        self.add_row(
+            t.bssid,
+            t.ssid,
+            str(t.channel),
+            t.encryption,
+            wps_str,
+            pwn_str,
+            key=t.bssid
+        )
 
 class AgentLog(Log):
     """

@@ -23,6 +23,20 @@ class GeminiClient:
             log.error(f"Failed to configure AI: {e}")
             return False
 
+    def validate_key(self, api_key: str) -> bool:
+        """
+        Tests if the API key is actually valid by making a tiny request.
+        """
+        try:
+            genai.configure(api_key=api_key)
+            test_model = genai.GenerativeModel('gemini-pro')
+            # Just a tiny test prompt
+            test_model.generate_content("ping", safety_settings=[])
+            return True
+        except Exception as e:
+            log.error(f"AI Key Validation Failed: {e}")
+            return False
+
     def analyze_target(self, ssid: str, encryption: str, vendor: str = "Unknown") -> str:
         if not self.enabled:
             return "AI Analysis Disabled (No API Key)"

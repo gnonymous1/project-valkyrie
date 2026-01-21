@@ -30,6 +30,36 @@ class ToolSuite:
             log.error(f"Command failed: {e}")
             return ""
 
+    def list_interfaces(self) -> List[str]:
+        """
+        Returns a list of available wireless interfaces.
+        """
+        if self.kb.environment.dry_run:
+            return ["wlan0", "wlan1", "wlan2"]
+            
+        try:
+            result = subprocess.run(["iw", "dev"], capture_output=True, text=True)
+            interfaces = []
+            for line in result.stdout.split('\n'):
+                if "Interface" in line:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        interfaces.append(parts[1])
+            
+            # Fallback if iw dev fails or returns nothing
+            if not interfaces:
+                result = subprocess.run(["ip", "-o", "link"], capture_output=True, text=True)
+                for line in result.stdout.split('\n'):
+                    if "wlan" in line:
+                        parts = line.split(':')
+                        if len(parts) >= 2:
+                            interfaces.append(parts[1].strip())
+            
+            return sorted(list(set(interfaces)))
+        except Exception as e:
+            log.error(f"Failed to list interfaces: {e}")
+            return []
+
     def enable_monitor_mode(self, interface: str) -> str:
         log.info(f"Enabling monitor mode on {interface}...")
         if self.kb.environment.dry_run:
