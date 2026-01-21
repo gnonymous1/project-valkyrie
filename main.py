@@ -2,7 +2,7 @@ import argparse
 import sys
 import logging
 from core.security_checks import SecurityChecks
-from ui.app import WifiAgentApp
+from ui.enhanced_app import EnhancedWifiAgentApp
 
 def setup_logging():
     """Setup application logging"""
@@ -43,7 +43,7 @@ def main():
     
     # Launch Textual App
     try:
-        app = WifiAgentApp(dry_run=args.dry_run, interface=args.interface)
+        app = EnhancedWifiAgentApp(dry_run=args.dry_run, interface=args.interface)
         app.run()
     except KeyboardInterrupt:
         logger.info("Application interrupted by user")
