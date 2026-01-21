@@ -9,7 +9,10 @@ def setup_logger(level="INFO"):
         level=level,
         format="%(message)s",
         datefmt="[%X]",
-        handlers=[RichHandler(rich_tracebacks=True, console=console)]
+        handlers=[
+            RichHandler(rich_tracebacks=True, console=console),
+            logging.FileHandler('valkyrie_app.log')
+        ]
     )
     log = logging.getLogger("wifi_agent")
     return log

@@ -4,15 +4,16 @@
 __pycache__/
 *.o
 *.obj
-dist/
-build/
 *.so
 *.dylib
 *.dll
+*.exe
+*.out
 
 # Dependencies
 .venv/
 venv/
+env/
 .env
 .env.local
 .env.*
@@ -21,27 +22,58 @@ venv/
 *.log
 *.tmp
 *.swp
-
-# Editors
-.vscode/
-.idea/
+*.swo
+*.bak
+*.~*
 
 # Coverage reports
 .coverage
 coverage/
 htmlcov/
 
-# Python specific
-*.pyo
-*.pyd
-.Python
-*.egg-info/
-.eggs/
-.mypy_cache/
-.pytest_cache/
-.tox/
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# System files
+# OS generated files
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Python specific
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Security related (avoid committing security test artifacts)
+*.pem
+*.key
+*.crt
+*.cert
+
+# UI/web artifacts
+static/dist/
+static/build/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 ```

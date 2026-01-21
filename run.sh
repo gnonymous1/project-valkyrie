@@ -4,7 +4,7 @@
 # Check for root
 if [ "$EUID" -ne 0 ]; then
   echo "Please run as root (sudo ./run.sh)"
-  exit
+  exit 1
 fi
 
 
@@ -15,5 +15,8 @@ if [ ! -d "venv" ]; then
 fi
 
 echo "[*] Launching Agent (via venv)..."
-# Run python from the venv directly
+
+# Activate virtual environment and run the application
+source ./venv/bin/activate
 ./venv/bin/python main.py "$@"
+deactivate
