@@ -18,6 +18,8 @@ from agents.exploitation import ExploitationAgent
 from agents.recovery import FailureRecoveryAgent
 from agents.reporting import ReportingAgent
 
+from ui.modals import APIKeyModal
+
 class WifiAgentApp(App):
     TITLE = "PROJECT VALKYRIE: Autonomous Wireless Interdiction Swarm"
     CSS = """
@@ -34,11 +36,15 @@ class WifiAgentApp(App):
     #right-pane {
         width: 50%;
     }
+    APIKeyModal {
+        align: center middle;
+    }
     """
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("d", "toggle_dry_run", "Toggle Dry Run"),
-        ("a", "analyze_target", "AI Analyze Selected")
+        ("a", "analyze_target", "AI Analyze Selected"),
+        ("k", "configure_api_key", "Config API Key")
     ]
 
     def __init__(self, dry_run=False, interface="wlan0"):
@@ -68,12 +74,28 @@ class WifiAgentApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
+        # Check if API Key is missing, ask for it
+        if not self.ai.api_key:
+            self.push_screen(APIKeyModal(), self.set_api_key)
+
         # Start Agent Swarm in Background Thread
         self.agent_thread = threading.Thread(target=self.run_agent_swarm, daemon=True)
         self.agent_thread.start()
         
         # Start UI Update Timer
         self.set_interval(1.0, self.update_ui)
+
+    def set_api_key(self, key: str | None) -> None:
+        if key:
+            if self.ai.configure(key):
+                self.notify("API Key Configured Successfully!")
+            else:
+                self.notify("Failed to configure API Key.", severity="error")
+        else:
+            self.notify("No API Key provided. AI features disabled.")
+
+    def action_configure_api_key(self) -> None:
+        self.push_screen(APIKeyModal(), self.set_api_key)
 
     def update_ui(self) -> None:
         self.query_one("#network_table").update_data()

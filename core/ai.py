@@ -7,12 +7,21 @@ class GeminiClient:
         self.api_key = os.getenv("GEMINI_API_KEY")
         self.enabled = False
         if self.api_key:
-            genai.configure(api_key=self.api_key)
+            self.configure(self.api_key)
+        else:
+            log.warning("GEMINI_API_KEY not found. AI features pending configuration.")
+
+    def configure(self, api_key: str):
+        try:
+            genai.configure(api_key=api_key)
             self.model = genai.GenerativeModel('gemini-pro')
             self.enabled = True
-            log.info("Gemini AI Client initialized.")
-        else:
-            log.warning("GEMINI_API_KEY not found. AI features disabled.")
+            self.api_key = api_key
+            log.info("Gemini AI Client Configured.")
+            return True
+        except Exception as e:
+            log.error(f"Failed to configure AI: {e}")
+            return False
 
     def analyze_target(self, ssid: str, encryption: str, vendor: str = "Unknown") -> str:
         if not self.enabled:
