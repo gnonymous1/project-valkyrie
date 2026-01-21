@@ -12,11 +12,15 @@ if [ -z "$GEMINI_API_KEY" ]; then
     echo "[!] GEMINI_API_KEY environment variable not found."
     echo "    AI features will be disabled."
     echo "    To enable, run: export GEMINI_API_KEY='your_key' before sudo -E ./run.sh"
-    echo "    Or edit this script to set it."
     # Optional: read -p "Enter API Key (or press Enter to skip): " key
 fi
 
-# Run the agent
-# Preserve env vars with -E if user exported key
-echo "[*] Launching Agent..."
-python3 main.py "$@"
+# Check if venv exists
+if [ ! -d "venv" ]; then
+    echo "[!] Virtual environment not found. Please run sudo ./install.sh first."
+    exit 1
+fi
+
+echo "[*] Launching Agent (via venv)..."
+# Run python from the venv directly
+./venv/bin/python main.py "$@"
