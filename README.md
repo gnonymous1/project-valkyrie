@@ -6,11 +6,13 @@ Project Valkyrie is an advanced, cognitive Wi-Fi security assessment agent desig
 ## Features
 *   **Autonomous Swarm**: coordinated agents for Recon, Threat Modeling, and Exploitation.
 *   **Lethal Capabilities**:
-    *   **WPS**: Pixie Dust & PIN Brute-force (`reaver`, `bully`).
-    *   **PMKID**: Client-less capture (`hcxdumptool`).
-    *   **Handshake**: Deauthentication & Capture (`aireplay-ng`).
+    *   **WPS**: Pixie Dust & PIN Brute-force (`reaver`, `bully`) - FULLY IMPLEMENTED.
+    *   **PMKID**: Client-less capture (`hcxdumptool`) - FULLY IMPLEMENTED.
+    *   **Handshake**: Deauthentication & Capture (`aireplay-ng`, `airodump-ng`) - FULLY IMPLEMENTED.
+    *   **Network Scanning**: Real-time AP discovery using `airodump-ng` - FULLY IMPLEMENTED.
 *   **Cognitive Engine**: Uses Gemini AI to analyze targets and suggest vulnerabilities based on vendor/encryption.
 *   **Professional TUI**: A "Hacker Movie" style terminal interface with live dashboards.
+*   **Real Tool Integration**: All wireless tools are now properly integrated instead of mocked.
 
 ## Installation
 
@@ -38,6 +40,16 @@ Project Valkyrie is an advanced, cognitive Wi-Fi security assessment agent desig
 sudo ./run.sh
 ```
 
+**With Custom Interface:**
+```bash
+sudo ./run.sh --interface wlan1
+```
+
+**Dry Run Mode (Simulation):**
+```bash
+sudo ./run.sh --dry-run
+```
+
 **With AI Capabilities:**
 1.  Get an API Key from [Google AI Studio](https://aistudio.google.com/).
 2.  Export it:
@@ -54,6 +66,15 @@ sudo ./run.sh
 *   `A`: Request AI Analysis for selected target.
 *   `D`: Toggle Dry Run mode.
 *   `Q`: Quit.
+
+## Technical Improvements
+*   **Real Tool Integration**: All wireless tools (reaver, aircrack-ng suite, hcxdumptool) are now fully integrated instead of mocked
+*   **Proper Monitor Mode**: Automatic monitor mode activation with verification
+*   **Real Scanning**: Network discovery through airodump-ng with CSV parsing
+*   **WPS Detection**: Wash integration for WPS-enabled network detection
+*   **Handshake Capture**: Full implementation of deauth + handshake capture workflow
+*   **PMKID Capture**: Complete PMKID extraction with hash verification
+*   **Error Handling**: Proper exception handling and cleanup routines
 
 ## Disclaimer
 This tool is for educational purposes and authorized security assessments only. Use responsibly.
