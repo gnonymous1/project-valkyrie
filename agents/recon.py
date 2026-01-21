@@ -8,23 +8,35 @@ class ReconAgent(BaseAgent):
         self.tools = ToolSuite()
 
     def run(self):
-        self.log.info("Starting Multi-Vector Reconnaissance...")
+        self.logger.info("Starting Multi-Vector Reconnaissance...")
         mon_iface = self.kb.environment.mon_interface
         
+        # Validate interface before scanning
+        if not self.execute_with_validation(mon_iface, "interface"):
+            self.logger.error(f"Invalid interface: {mon_iface}")
+            return
+            
         # Scan (Standard + WPS)
-        found_networks = self.tools.scan_networks(mon_iface)
+        found_networks = self.safe_execute(self.tools.scan_networks, mon_iface)
+        if not found_networks:
+            self.log_action("Scan", "No networks found or scan failed")
+            return
         
         # Process Results
         new_targets = 0
         wps_targets = 0
         for net in found_networks:
+            if not self.execute_with_validation(net.bssid, "mac"):
+                self.logger.warning(f"Invalid MAC address found: {net.bssid}")
+                continue
+                
             if net.bssid not in self.kb.targets:
                 self.kb.add_target(net)
                 new_targets += 1
                 if net.wps_enabled and not net.wps_locked:
-                    self.log.info(f"VULNERABLE TARGET: {net.ssid} (WPS Open) Version: {net.wps_version}")
+                    self.logger.info(f"VULNERABLE TARGET: {net.ssid} (WPS Open) Version: {net.wps_version}")
                     wps_targets += 1
                 else:
-                    self.log.info(f"Target Found: {net.ssid} ({net.bssid}) [{net.encryption}]")
+                    self.logger.info(f"Target Found: {net.ssid} ({net.bssid}) [{net.encryption}]")
         
         self.log_action("Scan", f"Found {new_targets} new networks ({wps_targets} WPS vulnerable).")

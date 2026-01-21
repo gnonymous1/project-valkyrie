@@ -4,6 +4,8 @@ import random
 from typing import List, Dict, Optional
 from core.logger import log
 from core.knowledge_base import KnowledgeBase, NetworkTarget
+from core.command_executor import CommandExecutor
+from core.validation import InputValidator
 from core.wrappers.hcx import HCXDumptoolWrapper
 from core.wrappers.aircrack import AireplayWrapper
 from core.wrappers.reaver import ReaverWrapper
@@ -12,6 +14,7 @@ class ToolSuite:
     def __init__(self):
         self.kb = KnowledgeBase()
         dry = self.kb.environment.dry_run
+        self.executor = CommandExecutor()
         
         # Initialize sub-wrappers
         self.hcx = HCXDumptoolWrapper(dry_run=dry)
@@ -23,11 +26,11 @@ class ToolSuite:
             log.debug(f"[DRY-RUN] Executing: {' '.join(cmd)}")
             return ""
         
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-            return result.stdout
-        except Exception as e:
-            log.error(f"Command failed: {e}")
+        success, stdout, stderr = self.executor.execute(cmd)
+        if success:
+            return stdout
+        else:
+            log.error(f"Command failed: {stderr}")
             return ""
 
     def list_interfaces(self) -> List[str]:
@@ -38,22 +41,21 @@ class ToolSuite:
             return ["wlan0", "wlan1", "wlan2"]
             
         try:
-            result = subprocess.run(["iw", "dev"], capture_output=True, text=True)
+            success, stdout, stderr = self.executor.execute(["iw", "dev"])
+            if not success:
+                # Fallback if iw dev fails
+                success, stdout, stderr = self.executor.execute(["ip", "-o", "link"])
+                if not success:
+                    return []
+                    
             interfaces = []
-            for line in result.stdout.split('\n'):
-                if "Interface" in line:
-                    parts = line.split()
+            for line in stdout.split('\n'):
+                if "wlan" in line:
+                    parts = line.split(':')
                     if len(parts) >= 2:
-                        interfaces.append(parts[1])
-            
-            # Fallback if iw dev fails or returns nothing
-            if not interfaces:
-                result = subprocess.run(["ip", "-o", "link"], capture_output=True, text=True)
-                for line in result.stdout.split('\n'):
-                    if "wlan" in line:
-                        parts = line.split(':')
-                        if len(parts) >= 2:
-                            interfaces.append(parts[1].strip())
+                        iface = parts[1].strip()
+                        if InputValidator.validate_interface_name(iface):
+                            interfaces.append(iface)
             
             return sorted(list(set(interfaces)))
         except Exception as e:
@@ -61,6 +63,10 @@ class ToolSuite:
             return []
 
     def enable_monitor_mode(self, interface: str) -> str:
+        if not InputValidator.validate_interface_name(interface):
+            log.error(f"Invalid interface name: {interface}")
+            return ""
+            
         log.info(f"Enabling monitor mode on {interface}...")
         if self.kb.environment.dry_run:
             self.kb.environment.mon_interface = f"{interface}mon"
@@ -68,28 +74,29 @@ class ToolSuite:
         
         try:
             # Kill processes that might interfere with monitor mode
-            subprocess.run(["airmon-ng", "check", "kill"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.executor.execute(["airmon-ng", "check", "kill"])
             
             # Start monitor mode
-            result = subprocess.run(["airmon-ng", "start", interface], capture_output=True, text=True)
+            success, stdout, stderr = self.executor.execute(["airmon-ng", "start", interface])
             
             # Determine the monitor interface name
             # Usually it's interface + "mon", but we can check to be sure
             mon_interface = f"{interface}mon"
             
             # Verify the interface was created
-            result = subprocess.run(["iw", "dev"], capture_output=True, text=True)
-            for line in result.stdout.split('\n'):
-                if "Interface" in line and interface in line and "mon" in line:
-                    parts = line.split()
-                    if len(parts) >= 2:
-                        mon_interface = parts[1]
-                        break
+            success, stdout, stderr = self.executor.execute(["iw", "dev"])
+            if success:
+                for line in stdout.split('\n'):
+                    if "Interface" in line and interface in line and "mon" in line:
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            mon_interface = parts[1]
+                            break
             
             # Additional verification that the interface is actually in monitor mode
             try:
-                mode_result = subprocess.run(["iw", "dev", mon_interface, "info"], capture_output=True, text=True)
-                if "type monitor" in mode_result.stdout:
+                success, mode_stdout, mode_stderr = self.executor.execute(["iw", "dev", mon_interface, "info"])
+                if success and "type monitor" in mode_stdout:
                     log.info(f"Monitor mode successfully enabled on {mon_interface}")
                 else:
                     log.warning(f"Interface {mon_interface} might not be in monitor mode")
@@ -102,6 +109,10 @@ class ToolSuite:
             return f"{interface}mon"  # Return a fallback name
 
     def scan_networks(self, interface: str, duration: int = 10) -> List[NetworkTarget]:
+        if not InputValidator.validate_interface_name(interface):
+            log.error(f"Invalid interface name: {interface}")
+            return []
+            
         # Basic scanning via airodump (mocked or real)
         # In Lethal Mode, we also scan for WPS now
         log.info(f"Scanning for networks (and WPS) on {interface} for {duration}s...")
@@ -128,7 +139,7 @@ class ToolSuite:
                     "--timeout", str(duration)  # Set timeout
                 ]
                 
-                result = subprocess.run(scan_cmd, capture_output=True, text=True, timeout=duration+5)
+                success, stdout, stderr = self.executor.execute(scan_cmd)
                 
                 # Parse the CSV output from airodump-ng
                 targets = []
@@ -185,9 +196,6 @@ class ToolSuite:
                                         )
                                         targets.append(target)
                 
-            except subprocess.TimeoutExpired:
-                log.warning("Airodump-ng scan timed out")
-                targets = []
             except Exception as e:
                 log.error(f"Airodump-ng scan failed: {e}")
                 targets = []
@@ -235,6 +243,10 @@ class ToolSuite:
         return targets
 
     def capture_handshake(self, interface: str, target: NetworkTarget, duration: int = 30) -> bool:
+        if not InputValidator.validate_interface_name(interface) or not InputValidator.validate_mac_address(target.bssid):
+            log.error(f"Invalid interface or MAC address: {interface}, {target.bssid}")
+            return False
+            
         # Classic Deauth + Capture
         log.info(f"Initiating Handshake Capture on {target.ssid}...")
         
@@ -284,11 +296,10 @@ class ToolSuite:
         
         if os.path.exists(pcap_file):
             # Use airdecap-ng to test if there's a valid handshake
-            test_cmd = ["airdecap-ng", "-b", target.bssid, pcap_file]
-            result = subprocess.run(test_cmd, capture_output=True, text=True)
+            success, stdout, stderr = self.executor.execute(["airdecap-ng", "-b", target.bssid, pcap_file])
             
             # Check output for successful handshake detection
-            if "Handshakes" in result.stdout:
+            if "Handshakes" in stdout:
                 handshake_found = True
                 target.handshake_captured = True
             else:
@@ -296,12 +307,12 @@ class ToolSuite:
                 tshark_cmd = [
                     "tshark",
                     "-r", pcap_file,
-                    "-Y", "eapol && wlan.sa==" + target.bssid,
+                    "-Y", f"eapol && wlan.sa=={target.bssid}",
                     "-T", "fields",
                     "-e", "frame.time"
                 ]
-                tshark_result = subprocess.run(tshark_cmd, capture_output=True, text=True)
-                if tshark_result.returncode == 0 and len(tshark_result.stdout.strip()) > 0:
+                success, tshark_stdout, tshark_stderr = self.executor.execute(tshark_cmd)
+                if success and len(tshark_stdout.strip()) > 0:
                     handshake_found = True
                     target.handshake_captured = True
         
@@ -320,12 +331,20 @@ class ToolSuite:
         return handshake_found
         
     def capture_pmkid(self, interface: str, target: NetworkTarget) -> bool:
+        if not InputValidator.validate_interface_name(interface) or not InputValidator.validate_mac_address(target.bssid):
+            log.error(f"Invalid interface or MAC address: {interface}, {target.bssid}")
+            return False
+            
         success = self.hcx.capture_pmkid(interface, target.bssid)
         if success:
             target.pmkid_captured = True
         return success
         
     def attack_wps(self, interface: str, target: NetworkTarget) -> bool:
+        if not InputValidator.validate_interface_name(interface) or not InputValidator.validate_mac_address(target.bssid):
+            log.error(f"Invalid interface or MAC address: {interface}, {target.bssid}")
+            return False
+            
         pin = self.reaver.attack_wps(interface, target.bssid)
         if pin:
             target.wps_pin = pin

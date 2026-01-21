@@ -6,16 +6,16 @@ class ThreatModelingAgent(BaseAgent):
         super().__init__("ThreatModelingAgent")
 
     def run(self):
-        self.log.info("Analyzing Targets for Lethality...")
+        self.logger.info("Analyzing Targets for Lethality...")
         
         targets = self.kb.get_unassessed_targets()
         if not targets:
-            self.log.debug("No unassessed targets to analyze.")
+            self.logger.debug("No unassessed targets to analyze.")
             return
 
         for target in targets:
             score = self.calculate_threat_score(target)
-            self.log.info(f"Target {target.ssid} given lethality score: {score}")
+            self.logger.info(f"Target {target.ssid} given lethality score: {score}")
             
         self.log_action("ThreatAnalysis", f"Analyzed {len(targets)} targets.")
 

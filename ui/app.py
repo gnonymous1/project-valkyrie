@@ -10,6 +10,7 @@ from ui.control_panel import TargetControlPanel
 from ui.settings import SettingsModal
 import threading
 import time
+import logging
 
 # Import Agents
 from agents.ethics import EthicsAgent
@@ -57,7 +58,8 @@ class WifiAgentApp(App):
         ("q", "quit", "Quit"),
         ("d", "toggle_dry_run", "Toggle Dry Run"),
         ("s", "open_settings", "Settings"),
-        ("k", "configure_api_key", "AI Key")
+        ("k", "configure_api_key", "AI Key"),
+        ("ctrl+r", "refresh_display", "Refresh Display")
     ]
 
     def __init__(self, dry_run=False, interface="wlan0"):
@@ -72,6 +74,7 @@ class WifiAgentApp(App):
         self.scanning = True
         self.running = True
         self.agent_thread = None
+        self.logger = logging.getLogger(__name__)
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -112,6 +115,11 @@ class WifiAgentApp(App):
     def action_open_settings(self) -> None:
         self.push_screen(SettingsModal(), self.set_interface)
 
+    def action_refresh_display(self) -> None:
+        """Manually refresh the display"""
+        self.update_ui()
+        self.notify("Display refreshed")
+
     def set_interface(self, iface: str | None) -> None:
         if iface:
             self.kb.environment.managed_interface = iface
@@ -127,12 +135,15 @@ class WifiAgentApp(App):
         try:
             # coordinate_to_cell_key might return None if no selection
             coord = table.cursor_coordinate
-            row_key = table.coordinate_to_cell_key(coord).row_key
-            if row_key:
-                target_bssid = str(row_key.value)
-                target = self.kb.get_target(target_bssid)
-                self.query_one("#control_panel").update_target(target)
-        except Exception:
+            if coord is not None:  # Add null check
+                row_key = table.coordinate_to_cell_key(coord).row_key
+                if row_key:
+                    target_bssid = str(row_key.value)
+                    target = self.kb.get_target(target_bssid)
+                    self.query_one("#control_panel").update_target(target)
+        except Exception as e:
+            self.logger.error(f"Error updating UI: {e}")
+            # Clear selection to avoid errors
             pass
 
         status = "Scanning" if self.scanning else "Idle"
@@ -142,29 +153,41 @@ class WifiAgentApp(App):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         target = self.query_one("#control_panel").selected_target
         mon_iface = self.kb.environment.mon_interface or self.kb.environment.managed_interface
+        control_panel = self.query_one("#control_panel")
 
         if event.button.id == "btn_scan":
             self.scanning = True
             self.notify("Manual scanning started.")
+            control_panel.update_status("Scanning started", "info")
         elif event.button.id == "btn_stop":
             self.scanning = False
             self.notify("Scanning paused.")
+            control_panel.update_status("Scanning paused", "info")
         elif event.button.id == "btn_ai" and target:
             self.notify(f"AI Analyzing {target.ssid}...")
+            control_panel.update_status(f"AI analyzing {target.ssid}", "info")
             threading.Thread(target=self.ai_analyze, args=(target,), daemon=True).start()
         elif event.button.id == "btn_deauth" and target:
             self.notify(f"Deauth Attack on {target.ssid}...")
+            control_panel.update_status(f"Deauth attack on {target.ssid}", "warning")
             threading.Thread(target=self.tools.capture_handshake, args=(mon_iface, target), daemon=True).start()
         elif event.button.id == "btn_pmkid" and target:
             self.notify(f"PMKID Capture on {target.ssid}...")
+            control_panel.update_status(f"PMKID capture on {target.ssid}", "warning")
             threading.Thread(target=self.tools.capture_pmkid, args=(mon_iface, target), daemon=True).start()
         elif event.button.id == "btn_wps" and target:
             self.notify(f"WPS Attack on {target.ssid}...")
+            control_panel.update_status(f"WPS attack on {target.ssid}", "warning")
             threading.Thread(target=self.tools.attack_wps, args=(mon_iface, target), daemon=True).start()
 
     def ai_analyze(self, target):
-        analysis = self.ai.analyze_target(target.ssid, target.encryption)
-        self.kb.log_action("GEMINI_AI", f"Result for {target.ssid}", analysis)
+        try:
+            analysis = self.ai.analyze_target(target.ssid, target.encryption)
+            self.kb.log_action("GEMINI_AI", f"Result for {target.ssid}", analysis)
+            self.query_one("#control_panel").update_status(f"AI analysis complete for {target.ssid}", "success")
+        except Exception as e:
+            self.logger.error(f"AI analysis error: {e}")
+            self.query_one("#control_panel").update_status(f"AI analysis failed: {e}", "error")
 
     def run_agent_swarm(self):
         agents = {
@@ -192,6 +215,7 @@ class WifiAgentApp(App):
                 agents["threat"].run()
                 agents["exploit"].run()
             except Exception as e:
+                self.logger.error(f"Error in agent swarm: {e}")
                 self.kb.log_action("SYSTEM", "Error in swarm", str(e))
             
             time.sleep(5)

@@ -4,7 +4,7 @@
 echo "[*] Checking for root privileges..."
 if [ "$EUID" -ne 0 ]; then 
   echo "Please run as root (sudo ./install.sh)"
-  exit
+  exit 1
 fi
 
 echo "[*] Updating package lists..."
@@ -20,6 +20,7 @@ if [ ! -d "venv" ]; then
 fi
 
 echo "[*] Installing Python dependencies into venv..."
+./venv/bin/pip install --upgrade pip
 ./venv/bin/pip install -r requirements.txt
 
 echo "[+] Installation complete!"

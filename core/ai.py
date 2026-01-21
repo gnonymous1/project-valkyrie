@@ -1,11 +1,13 @@
 import os
 import google.generativeai as genai
 from core.logger import log
+import logging
 
 class GeminiClient:
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY")
         self.enabled = False
+        self.logger = logging.getLogger(__name__)
         if self.api_key:
             self.configure(self.api_key)
         else:
@@ -20,6 +22,7 @@ class GeminiClient:
             log.info("Gemini AI Client Configured.")
             return True
         except Exception as e:
+            self.logger.error(f"Failed to configure AI: {e}")
             log.error(f"Failed to configure AI: {e}")
             return False
 
@@ -34,6 +37,7 @@ class GeminiClient:
             test_model.generate_content("ping", safety_settings=[])
             return True
         except Exception as e:
+            self.logger.error(f"AI Key Validation Failed: {e}")
             log.error(f"AI Key Validation Failed: {e}")
             return False
 
@@ -52,6 +56,7 @@ class GeminiClient:
             response = self.model.generate_content(prompt)
             return response.text
         except Exception as e:
+            self.logger.error(f"Gemini API Error: {e}")
             log.error(f"Gemini API Error: {e}")
             return "Analysis Failed (API Error)"
 
@@ -67,5 +72,6 @@ class GeminiClient:
             response = self.model.generate_content(prompt)
             return response.text
         except Exception as e:
+            self.logger.error(f"Gemini API Error: {e}")
             log.error(f"Gemini API Error: {e}")
             return "Suggestion Failed."

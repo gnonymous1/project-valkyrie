@@ -2,6 +2,7 @@ from textual.widgets import Static, Button, Label
 from textual.containers import Vertical, Horizontal
 from textual.app import ComposeResult
 from core.knowledge_base import NetworkTarget
+import logging
 
 class TargetControlPanel(Static):
     """
@@ -10,6 +11,7 @@ class TargetControlPanel(Static):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.selected_target = None
+        self.logger = logging.getLogger(__name__)
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -26,6 +28,9 @@ class TargetControlPanel(Static):
             with Horizontal():
                 yield Button("START SCAN", variant="success", id="btn_scan")
                 yield Button("STOP SCAN", variant="error", id="btn_stop")
+                
+            # Status display for user feedback
+            yield Label("", id="status_message")
 
     def update_target(self, target: NetworkTarget):
         self.selected_target = target
@@ -44,3 +49,21 @@ class TargetControlPanel(Static):
             for btn in self.query_all("Button"):
                 if "btn_scan" not in btn.id and "btn_stop" not in btn.id:
                     btn.disabled = True
+    
+    def update_status(self, message: str, status_type: str = "info"):
+        """Update the status message with color coding"""
+        status_label = self.query_one("#status_message")
+        color_map = {
+            "info": "[blue]",
+            "success": "[green]",
+            "warning": "[yellow]",
+            "error": "[red]"
+        }
+        color = color_map.get(status_type, "[blue]")
+        status_label.update(f"{color}{message}[/]")
+        self.logger.info(f"Status: {message}")
+    
+    def clear_status(self):
+        """Clear the status message"""
+        status_label = self.query_one("#status_message")
+        status_label.update("")
