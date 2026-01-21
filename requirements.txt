@@ -3,3 +3,5 @@ rich
 requests
 google-generativeai
 textual
+inquirer
+python-dotenv

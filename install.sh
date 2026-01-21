@@ -11,8 +11,8 @@ echo "[*] Updating package lists..."
 apt-get update
 
 echo "[*] Installing system dependencies..."
-# Removed 'wash' because it is included in the 'reaver' package
-apt-get install -y aircrack-ng reaver hcxtools python3-pip python3-venv
+# Install all necessary wireless security tools
+apt-get install -y aircrack-ng reaver bully hcxtools hcxdumptool tshark python3-pip python3-venv
 
 echo "[*] Setting up Python Virtual Environment (to avoid system conflicts)..."
 if [ ! -d "venv" ]; then
