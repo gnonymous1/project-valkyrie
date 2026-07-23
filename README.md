@@ -24,6 +24,12 @@
 
 ---
 
+## 🧭 Project Valkyrie 5.0 Blueprint
+
+The enterprise upgrade blueprint for Project Valkyrie 5.0 is available in [`docs/project-valkyrie-5-blueprint.md`](docs/project-valkyrie-5-blueprint.md). It defines the target architecture, stack, repository layout, platform modules, security standards, quality gates, and initial deliverables for evolving Valkyrie into a modular enterprise platform.
+
+---
+
 ## 🔍 What Is Project Valkyrie?
 
 **Project Valkyrie** is an advanced, autonomous Wi-Fi security assessment framework for Kali Linux. It leverages **Google Gemini AI** as a cognitive reasoning engine to perform intelligent, context-aware wireless audits — selecting attack vectors based on vendor fingerprinting, encryption type, and network configuration.
